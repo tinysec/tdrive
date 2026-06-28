@@ -1,0 +1,102 @@
+package view
+
+import "tdrive/internal/i18n"
+
+// EditPage renders the in-browser editor. Markdown gets a formatting toolbar
+// and three modes (split / write / preview); HTML gets a live preview; plain
+// text gets a full-width source area. The markdown preview is driven by the
+// same client renderer the viewer uses, so the preview matches the final
+// rendered result exactly.
+templ EditPage(data EditData) {
+	@Layout(data.Page) {
+		<form class="editor" method="post" action={ templ.URL(EditURL(data.Path)) }>
+			<div class="page-head doc-head">
+				<a class="back-link" href={ templ.URL(ViewURL(data.Path)) }>
+					@icon("corner-up")
+					<span>{ i18n.T(ctx, "action.cancel") }</span>
+				</a>
+				<h1 class="doc-title">{ data.Name }</h1>
+				<button class="btn btn-primary btn-sm" type="submit">
+					@icon("check")
+					<span>{ i18n.T(ctx, "action.save") }</span>
+				</button>
+			</div>
+			@editorBody(data)
+		</form>
+		if data.Kind == "markdown" {
+			<link rel="stylesheet" href="/static/highlight-theme.css"/>
+			<link rel="stylesheet" href="/static/katex.min.css"/>
+			<script src="/static/marked.min.js"></script>
+			<script src="/static/mermaid.min.js"></script>
+			<script src="/static/highlight.min.js"></script>
+			<script src="/static/katex.min.js"></script>
+			<script src="/static/katex-auto-render.min.js"></script>
+			<script src="/static/markdown-ext.js"></script>
+			<script src="/static/render.js"></script>
+			<script src="/static/editor.js"></script>
+		} else if data.Kind == "html" {
+			<script src="/static/render.js"></script>
+		}
+	}
+}
+
+// editorBody renders the textarea and, for markdown/html, the live preview pane.
+// The markdown editor wraps the source/preview pair in a workspace element that
+// carries the active mode; editor.js toggles modes and applies toolbar commands.
+templ editorBody(data EditData) {
+	if data.Kind == "markdown" {
+		@markdownEditor(data)
+	} else if data.Kind == "html" {
+		<div class="editor-split">
+			<textarea class="editor-source" name="content" data-html-source spellcheck="false">{ data.Content }</textarea>
+			<iframe class="editor-preview html-view" data-html-preview title="preview"></iframe>
+		</div>
+	} else {
+		<textarea class="editor-source editor-full" name="content" spellcheck="false">{ data.Content }</textarea>
+	}
+}
+
+// markdownEditor renders the markdown editing surface: a formatting toolbar, a
+// mode switch (split / write / preview), and the source + preview panes. The
+// initial mode is "split" (live preview beside the source). editor.js owns the
+// interactivity; the data-md-cmd attributes on the toolbar buttons dispatch to
+// the handlers there.
+templ markdownEditor(data EditData) {
+	<div class="md-editor" data-md-editor data-md-mode="split">
+		<div class="md-toolbar" role="toolbar" aria-label={ i18n.T(ctx, "editor.toolbar") }>
+			<div class="md-toolbar-group">
+				<button class="md-btn md-btn-bold" type="button" data-md-cmd="bold" title={ i18n.T(ctx, "editor.bold") } aria-label={ i18n.T(ctx, "editor.bold") }>B</button>
+				<button class="md-btn md-btn-italic" type="button" data-md-cmd="italic" title={ i18n.T(ctx, "editor.italic") } aria-label={ i18n.T(ctx, "editor.italic") }>I</button>
+				<button class="md-btn" type="button" data-md-cmd="code" title={ i18n.T(ctx, "editor.code") } aria-label={ i18n.T(ctx, "editor.code") }>@icon("code")</button>
+			</div>
+			<span class="md-toolbar-sep"></span>
+			<div class="md-toolbar-group">
+				<button class="md-btn" type="button" data-md-cmd="h1" title={ i18n.T(ctx, "editor.h1") }>H1</button>
+				<button class="md-btn" type="button" data-md-cmd="h2" title={ i18n.T(ctx, "editor.h2") }>H2</button>
+				<button class="md-btn" type="button" data-md-cmd="h3" title={ i18n.T(ctx, "editor.h3") }>H3</button>
+			</div>
+			<span class="md-toolbar-sep"></span>
+			<div class="md-toolbar-group">
+				<button class="md-btn" type="button" data-md-cmd="quote" title={ i18n.T(ctx, "editor.quote") } aria-label={ i18n.T(ctx, "editor.quote") }>@icon("quote")</button>
+				<button class="md-btn" type="button" data-md-cmd="ul" title={ i18n.T(ctx, "editor.bullet") } aria-label={ i18n.T(ctx, "editor.bullet") }>@icon("list-ul")</button>
+				<button class="md-btn" type="button" data-md-cmd="ol" title={ i18n.T(ctx, "editor.ordered") } aria-label={ i18n.T(ctx, "editor.ordered") }>@icon("list-ol")</button>
+			</div>
+			<span class="md-toolbar-sep"></span>
+			<div class="md-toolbar-group">
+				<button class="md-btn" type="button" data-md-cmd="link" title={ i18n.T(ctx, "editor.link") } aria-label={ i18n.T(ctx, "editor.link") }>@icon("link")</button>
+				<button class="md-btn" type="button" data-md-cmd="table" title={ i18n.T(ctx, "editor.table") } aria-label={ i18n.T(ctx, "editor.table") }>@icon("table")</button>
+				<button class="md-btn" type="button" data-md-cmd="hr" title={ i18n.T(ctx, "editor.hr") } aria-label={ i18n.T(ctx, "editor.hr") }>@icon("minus")</button>
+			</div>
+			<div class="md-toolbar-spacer"></div>
+			<div class="md-mode-switch" role="group" aria-label={ i18n.T(ctx, "editor.mode") }>
+				<button class="md-mode-btn" type="button" data-md-mode="write" title={ i18n.T(ctx, "editor.mode_write") }>{ i18n.T(ctx, "editor.mode_write") }</button>
+				<button class="md-mode-btn md-mode-active" type="button" data-md-mode="split" title={ i18n.T(ctx, "editor.mode_split") }>{ i18n.T(ctx, "editor.mode_split") }</button>
+				<button class="md-mode-btn" type="button" data-md-mode="preview" title={ i18n.T(ctx, "editor.mode_preview") }>{ i18n.T(ctx, "editor.mode_preview") }</button>
+			</div>
+		</div>
+		<div class="md-workspace">
+			<textarea class="editor-source" name="content" data-md-source spellcheck="false">{ data.Content }</textarea>
+			<div class="markdown-body editor-preview" data-md-preview></div>
+		</div>
+	</div>
+}

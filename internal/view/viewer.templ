@@ -1,0 +1,74 @@
+package view
+
+import "tdrive/internal/i18n"
+
+// ViewerPage renders the online preview of a single file.
+templ ViewerPage(data ViewerData) {
+	@Layout(data.Page) {
+		<div class="viewer">
+			<div class="page-head doc-head">
+				<a class="back-link" href={ templ.URL(BrowseURL(data.DirPath)) }>
+					@icon("corner-up")
+					<span>{ i18n.T(ctx, "view.back") }</span>
+				</a>
+				<h1 class="doc-title">{ data.Name }</h1>
+				<div class="doc-actions">
+					if data.Editable {
+						<a class="btn btn-ghost btn-sm" href={ templ.URL(EditURL(data.Path)) }>
+							@icon("pencil")
+							<span>{ i18n.T(ctx, "action.edit") }</span>
+						</a>
+					}
+					<a class="btn btn-ghost btn-sm" href={ templ.URL(RawURL(data.Path)) } target="_blank">
+						{ i18n.T(ctx, "view.raw") }
+					</a>
+					<a class="btn btn-primary btn-sm" href={ templ.URL(DownloadURL(data.Path)) }>
+						@icon("download")
+						<span>{ i18n.T(ctx, "action.download") }</span>
+					</a>
+				</div>
+			</div>
+			@viewerBody(data)
+		</div>
+		if data.Kind == "markdown" {
+			<link rel="stylesheet" href="/static/highlight-theme.css"/>
+			<link rel="stylesheet" href="/static/katex.min.css"/>
+			<script src="/static/marked.min.js"></script>
+			<script src="/static/mermaid.min.js"></script>
+			<script src="/static/highlight.min.js"></script>
+			<script src="/static/katex.min.js"></script>
+			<script src="/static/katex-auto-render.min.js"></script>
+			<script src="/static/markdown-ext.js"></script>
+			<script src="/static/render.js"></script>
+		} else if data.HighlightLang != "" {
+			<link rel="stylesheet" href="/static/highlight-theme.css"/>
+			<script src="/static/highlight.min.js"></script>
+			<script src="/static/render.js"></script>
+		}
+	}
+}
+
+// viewerBody renders the preview content according to the detected file kind.
+templ viewerBody(data ViewerData) {
+	if data.Kind == "markdown" {
+		<div class="markdown-body" data-markdown-view data-src={ RawURL(data.Path) }></div>
+	} else if data.Kind == "html" {
+		<iframe class="html-view" src={ templ.URL(RawURL(data.Path)) } title={ data.Name }></iframe>
+	} else if data.Kind == "text" {
+		if data.HighlightLang != "" {
+			<pre class="text-view"><code class={ "language-" + data.HighlightLang }>{ data.Content }</code></pre>
+		} else {
+			<pre class="text-view"><code>{ data.Content }</code></pre>
+		}
+	} else if data.Kind == "image" {
+		<div class="image-view">
+			<img src={ templ.URL(RawURL(data.Path)) } alt={ i18n.T(ctx, "view.image_alt") }/>
+		</div>
+	} else {
+		<div class="no-preview">
+			<span class="empty-icon">@icon("file")</span>
+			<p>{ i18n.T(ctx, "view.cannot_preview") }</p>
+			<p class="empty-hint">{ i18n.T(ctx, "view.download_instead") }</p>
+		</div>
+	}
+}

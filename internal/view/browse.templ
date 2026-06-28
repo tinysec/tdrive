@@ -1,0 +1,505 @@
+package view
+
+import "tdrive/internal/i18n"
+
+// BrowsePage renders the full directory-browsing page.
+templ BrowsePage(data BrowseData) {
+	@Layout(data.Page) {
+		<div class="page-head">
+			@breadcrumbs(data)
+			if false == data.ReadOnly {
+				@toolbar(data)
+			}
+		</div>
+		if len(data.Rows) > 0 {
+			@listToolbar()
+		}
+		@FileList(data)
+		@dirReadme(data)
+		@toastLabels()
+		@contextMenu()
+		// list.js (filter+sort), toast.js (feedback), select.js (selection +
+		// context menu + keyboard) apply to read-only browsing too.
+		<script src="/static/list.js"></script>
+		<script src="/static/toast.js"></script>
+		<script src="/static/select.js"></script>
+		if false == data.ReadOnly {
+			@uploadWidget(data)
+			<script src="/static/menu.js"></script>
+			<script src="/static/upload.js"></script>
+			<script src="/static/batch.js"></script>
+			<script src="/static/drag.js"></script>
+		}
+	}
+}
+
+// toastLabels carries the localized confirmation strings for toast.js. Backend
+// error messages come from the failing response itself; these cover the success
+// confirmations and the JS-driven "link copied".
+templ toastLabels() {
+	<div
+		data-toasts
+		data-deleted={ i18n.T(ctx, "toast.deleted") }
+		data-renamed={ i18n.T(ctx, "toast.renamed") }
+		data-moved={ i18n.T(ctx, "toast.moved") }
+		data-created={ i18n.T(ctx, "toast.created") }
+		data-copied={ i18n.T(ctx, "toast.copied") }
+		data-error={ i18n.T(ctx, "error.generic") }
+		hidden
+	></div>
+}
+
+// contextMenu renders the right-click menu shell (hidden). select.js positions
+// it, shows the items relevant to the current selection, and dispatches actions
+// by their data-ctx key.
+templ contextMenu() {
+	<div class="context-menu" data-ctxmenu hidden>
+		<button class="context-item" type="button" data-ctx="open">
+			@icon("eye")
+			<span>{ i18n.T(ctx, "action.open") }</span>
+		</button>
+		<button class="context-item" type="button" data-ctx="download">
+			@icon("download")
+			<span>{ i18n.T(ctx, "action.download") }</span>
+		</button>
+		<button class="context-item" type="button" data-ctx="copy">
+			@icon("link")
+			<span>{ i18n.T(ctx, "action.copy_link") }</span>
+		</button>
+		<button class="context-item" type="button" data-ctx="zip">
+			@icon("archive")
+			<span>{ i18n.T(ctx, "action.zip") }</span>
+		</button>
+		<div class="context-sep" data-ctx-sep></div>
+		<button class="context-item" type="button" data-ctx="rename">
+			@icon("pencil")
+			<span>{ i18n.T(ctx, "action.rename") }</span>
+		</button>
+		<button class="context-item context-item-danger" type="button" data-ctx="delete">
+			@icon("trash")
+			<span>{ i18n.T(ctx, "action.delete") }</span>
+		</button>
+	</div>
+}
+
+// listToolbar renders the workspace toolbar above the listing: an instant filter
+// box for the current folder. It lives outside the swappable list so the typed
+// text and focus survive htmx refreshes; list.js re-applies it after each swap.
+templ listToolbar() {
+	<div class="list-toolbar">
+		<div class="filter">
+			<span class="filter-icon">@icon("search")</span>
+			<input
+				class="filter-input"
+				type="text"
+				data-filter
+				placeholder={ i18n.T(ctx, "list.filter") }
+				autocomplete="off"
+				aria-label={ i18n.T(ctx, "list.filter") }
+			/>
+			<span
+				class="filter-info"
+				data-filter-info
+				data-match-prefix={ i18n.T(ctx, "list.match_prefix") }
+				data-match-suffix={ i18n.T(ctx, "list.match_suffix") }
+				hidden
+			></span>
+		</div>
+		<div class="view-toggle" data-view-toggle>
+			<button class="view-btn" type="button" data-view="list" title={ i18n.T(ctx, "list.view_list") } aria-label={ i18n.T(ctx, "list.view_list") }>
+				@icon("view-list")
+			</button>
+			<button class="view-btn" type="button" data-view="grid" title={ i18n.T(ctx, "list.view_grid") } aria-label={ i18n.T(ctx, "list.view_grid") }>
+				@icon("view-grid")
+			</button>
+		</div>
+	</div>
+}
+
+// breadcrumbs renders the path navigation from the root to the current directory.
+// The first segment is shown as a home glyph; later segments are separated by a
+// chevron.
+templ breadcrumbs(data BrowseData) {
+	<nav class="breadcrumbs" aria-label="breadcrumb">
+		for index, crumb := range data.Crumbs {
+			if index > 0 {
+				<span class="crumb-sep">@icon("chevron-right")</span>
+			}
+			<a class="crumb" href={ templ.URL(BrowseURL(crumb.Path)) }>
+				if index == 0 {
+					<span class="crumb-home">@icon("home")</span>
+				} else {
+					{ crumb.Name }
+				}
+			</a>
+		}
+	</nav>
+}
+
+// toolbar renders the "new" dropdown menu and the upload trigger. The menu lists
+// the create actions; picking one swaps the list for that action's name input
+// (menu.js), so no text field stands open on the page.
+templ toolbar(data BrowseData) {
+	<div class="toolbar">
+		<details class="newmenu" data-newmenu>
+			<summary class="btn btn-ghost">
+				@icon("plus")
+				<span>{ i18n.T(ctx, "action.new") }</span>
+				<span class="menu-caret">@icon("chevron-down")</span>
+			</summary>
+			<div class="menu-pop">
+				<div class="menu-list" data-menu-list>
+					<button class="menu-item" type="button" data-new-pick="folder">
+						@icon("folder-plus")
+						<span>{ i18n.T(ctx, "action.newfolder") }</span>
+					</button>
+					<button class="menu-item" type="button" data-new-pick="file">
+						@icon("file-plus")
+						<span>{ i18n.T(ctx, "action.newfile") }</span>
+					</button>
+				</div>
+				@newMenuForm("folder", "/api/mkdir", data.Dir, i18n.T(ctx, "newfolder.placeholder"))
+				@newMenuForm("file", "/api/newfile", data.Dir, i18n.T(ctx, "newfile.placeholder"))
+			</div>
+		</details>
+		<details class="newmenu" data-newmenu>
+			<summary class="btn btn-primary">
+				@icon("upload")
+				<span>{ i18n.T(ctx, "action.upload") }</span>
+				<span class="menu-caret">@icon("chevron-down")</span>
+			</summary>
+			<div class="menu-pop">
+				<div class="menu-list" data-menu-list>
+					<button class="menu-item" type="button" data-upload-open>
+						@icon("upload")
+						<span>{ i18n.T(ctx, "action.upload_files") }</span>
+					</button>
+					<button class="menu-item" type="button" data-upload-open data-upload-folder="1">
+						@icon("folder-plus")
+						<span>{ i18n.T(ctx, "action.upload_folder") }</span>
+					</button>
+				</div>
+			</div>
+		</details>
+	</div>
+}
+
+// newMenuForm renders one create form inside the "new" menu: a name input that
+// posts to the given endpoint. It stays hidden until its menu item is picked.
+// The folder endpoint swaps the listing in place; the file endpoint replies with
+// an HX-Redirect into the editor, which htmx follows.
+templ newMenuForm(kind string, endpoint string, dir string, placeholder string) {
+	<form
+		class="menu-form"
+		data-menu-form={ kind }
+		hx-post={ endpoint }
+		hx-target="#file-list"
+		hx-swap="outerHTML"
+		hx-on::after-request="if(event.detail.successful){this.reset();this.closest('details').open=false}"
+		hidden
+	>
+		<input type="hidden" name="dir" value={ dir }/>
+		<input
+			class="newfolder-input"
+			type="text"
+			name="name"
+			placeholder={ placeholder }
+			autocomplete="off"
+			data-menu-input
+			required
+		/>
+		<button class="btn btn-primary btn-sm" type="submit">{ i18n.T(ctx, "action.confirm") }</button>
+	</form>
+}
+
+// FileList renders the directory contents and is re-rendered on its own for htmx
+// swaps. When writable it wraps the table in a form so checked rows can be
+// deleted in one batch request.
+templ FileList(data BrowseData) {
+	<section id="file-list" class="file-list" data-browse-dir={ data.Dir }>
+		if len(data.Rows) == 0 {
+			@emptyState()
+		} else {
+			<form class="files-form">
+				<input type="hidden" name="dir" value={ data.Dir }/>
+				if false == data.ReadOnly {
+					@batchBar()
+				}
+				<table class="files">
+					<thead>
+						<tr>
+							if false == data.ReadOnly {
+								<th class="col-check"><input type="checkbox" data-select-all aria-label="select all"/></th>
+							}
+							<th class="col-name" data-sort="name"><span class="th-label">{ i18n.T(ctx, "browse.name") }</span></th>
+							<th class="col-size" data-sort="size"><span class="th-label">{ i18n.T(ctx, "browse.size") }</span></th>
+							<th class="col-mod" data-sort="mtime"><span class="th-label">{ i18n.T(ctx, "browse.modified") }</span></th>
+							<th class="col-actions"></th>
+						</tr>
+					</thead>
+					<tbody>
+						if data.ParentPath != "" {
+							@parentRow(data.ParentPath, data.ReadOnly)
+						}
+						for _, row := range data.Rows {
+							@fileRow(row, data.Dir, data.ReadOnly)
+						}
+					</tbody>
+				</table>
+				@listStatus(data)
+			</form>
+		}
+	</section>
+}
+
+// listStatus renders the footer status bar: the folder totals (server-rendered)
+// and a selection summary that batch.js fills in while rows are selected.
+templ listStatus(data BrowseData) {
+	<div class="list-status">
+		<span class="status-total">{ data.StatusText }</span>
+		<span
+			class="status-selection"
+			data-status-selection
+			data-sel-prefix={ i18n.T(ctx, "batch.selected_prefix") }
+			data-sel-suffix={ i18n.T(ctx, "batch.selected_suffix") }
+			hidden
+		></span>
+	</div>
+}
+
+// batchBar is the contextual action bar shown only while one or more rows are
+// selected (batch.js toggles the hidden attribute as the selection changes).
+templ batchBar() {
+	<div class="batch-bar" data-batch-bar hidden>
+		<span class="batch-count">
+			{ i18n.T(ctx, "batch.selected_prefix") }
+			<span data-batch-count>0</span>
+			{ i18n.T(ctx, "batch.selected_suffix") }
+		</span>
+		<button
+			class="btn btn-danger btn-sm"
+			type="button"
+			data-batch-delete
+			disabled
+			hx-post="/api/batch-delete"
+			hx-target="#file-list"
+			hx-swap="outerHTML"
+			hx-confirm={ i18n.T(ctx, "batch.delete_confirm") }
+		>
+			@icon("trash")
+			<span>{ i18n.T(ctx, "batch.delete") }</span>
+		</button>
+	</div>
+}
+
+// parentRow renders the "up one level" navigation row.
+templ parentRow(parentPath string, readOnly bool) {
+	<tr class="row row-parent" { ParentDropAttrs(parentPath, readOnly)... }>
+		if false == readOnly {
+			<td class="col-check"></td>
+		}
+		<td class="col-name">
+			<a class="entry" href={ templ.URL(BrowseURL(parentPath)) }>
+				<span class="entry-icon">@icon("corner-up")</span>
+				<span class="entry-name">{ i18n.T(ctx, "browse.parent") }</span>
+			</a>
+		</td>
+		<td class="col-size"></td>
+		<td class="col-mod"></td>
+		<td class="col-actions"></td>
+	</tr>
+}
+
+// fileRow renders a single file or directory row. The per-row actions live in a
+// group that stays invisible until the row is hovered or focused, keeping the
+// list calm while the actions remain one reveal away.
+templ fileRow(row FileRow, dir string, readOnly bool) {
+	<tr class="row" { RowDataAttrs(row)... } { RowDragAttrs(row, readOnly)... }>
+		if false == readOnly {
+			<td class="col-check">
+				<input type="checkbox" class="row-select" name="paths" value={ row.Path } aria-label={ row.Name }/>
+			</td>
+		}
+		<td class="col-name">
+			if row.IsDir {
+				<a class="entry" draggable="false" href={ templ.URL(BrowseURL(row.Path)) }>
+					<span class="entry-icon entry-icon-dir">@icon("folder")</span>
+					<span class="entry-name">{ row.Name }</span>
+				</a>
+			} else {
+				<a class={ "entry", templ.KV("entry-image", row.IsImage) } draggable="false" href={ templ.URL(ViewURL(row.Path)) }>
+					<span class="entry-icon">@icon(FileIconName(row))</span>
+					if row.IsImage {
+						<img class="entry-thumb" loading="lazy" data-thumb={ RawURL(row.Path) } alt=""/>
+					}
+					<span class="entry-name">{ row.Name }</span>
+				</a>
+			}
+		</td>
+		<td class="col-size">{ row.SizeText }</td>
+		<td class="col-mod">{ row.ModText }</td>
+		<td class="col-actions">
+			<div class="row-actions">
+				<a class="iconbtn" href={ templ.URL(RawURL(row.Path)) } target="_blank" rel="noopener" title={ i18n.T(ctx, "action.open_raw") } aria-label={ i18n.T(ctx, "action.open_raw") }>
+					@icon("external-link")
+				</a>
+				<a class="iconbtn" href={ templ.URL(DownloadURL(row.Path)) } title={ i18n.T(ctx, "action.download") } aria-label={ i18n.T(ctx, "action.download") }>
+					@icon("download")
+				</a>
+				if false == row.IsDir {
+				if row.Viewable {
+					<a class="iconbtn" href={ templ.URL(ViewURL(row.Path)) } title={ i18n.T(ctx, "action.view") } aria-label={ i18n.T(ctx, "action.view") }>
+						@icon("eye")
+					</a>
+				}
+				if IsZipName(row.Name) {
+					<button
+						class="iconbtn"
+						type="button"
+						data-action="unzip"
+						title={ i18n.T(ctx, "action.unzip") }
+						aria-label={ i18n.T(ctx, "action.unzip") }
+					>
+						@icon("archive")
+					</button>
+				}
+				<button
+					class="iconbtn"
+					type="button"
+						data-action="copy-link"
+						title={ i18n.T(ctx, "action.copy_link") }
+						aria-label={ i18n.T(ctx, "action.copy_link") }
+					>
+						@icon("link")
+					</button>
+				}
+				if false == readOnly {
+					<button
+						class="iconbtn"
+						type="button"
+						data-action="rename"
+						title={ i18n.T(ctx, "action.rename") }
+						aria-label={ i18n.T(ctx, "action.rename") }
+						hx-get="/api/rename-form"
+						hx-vals={ PathDirVals(row.Path, dir) }
+						hx-target="closest tr"
+						hx-swap="outerHTML"
+					>
+						@icon("pencil")
+					</button>
+					<button
+						class="iconbtn iconbtn-danger"
+						type="button"
+						data-action="delete"
+						title={ i18n.T(ctx, "action.delete") }
+						aria-label={ i18n.T(ctx, "action.delete") }
+						hx-post="/api/delete"
+						hx-vals={ PathDirVals(row.Path, dir) }
+						hx-confirm={ row.ConfirmText }
+						hx-target="#file-list"
+						hx-swap="outerHTML"
+					>
+						@icon("trash")
+					</button>
+				}
+			</div>
+		</td>
+	</tr>
+}
+
+// RenameRow replaces a file row with an inline edit form. The field accepts a
+// new name (rename in place) or a path (move). It is rendered on its own so the
+// rename action can swap a single row via htmx.
+templ RenameRow(name string, path string, dir string) {
+	<tr class="row row-edit">
+		<td class="col-name" colspan="4">
+			<form
+				class="rename-form"
+				hx-post="/api/rename"
+				hx-target="#file-list"
+				hx-swap="outerHTML"
+			>
+				<input type="hidden" name="dir" value={ dir }/>
+				<input type="hidden" name="path" value={ path }/>
+				<input class="rename-input" type="text" name="name" value={ name } autocomplete="off" autofocus required/>
+				<button class="btn btn-primary btn-sm" type="submit">{ i18n.T(ctx, "action.confirm") }</button>
+				<button
+					class="btn btn-ghost btn-sm"
+					type="button"
+					hx-get="/api/list"
+					hx-vals={ DirVals(dir) }
+					hx-target="#file-list"
+					hx-swap="outerHTML"
+				>{ i18n.T(ctx, "action.cancel") }</button>
+			</form>
+		</td>
+	</tr>
+}
+
+// emptyState renders a friendly message when a directory has no entries.
+templ emptyState() {
+	<div class="empty">
+		<span class="empty-icon">@icon("folder-open")</span>
+		<h2 class="empty-title">{ i18n.T(ctx, "browse.empty.title") }</h2>
+		<p class="empty-hint">{ i18n.T(ctx, "browse.empty.hint") }</p>
+	</div>
+}
+
+// uploadWidget drives uploads without a panel: the toolbar's upload button opens
+// the native file picker, files dropped anywhere on the page are accepted, and
+// progress is shown in a small bottom-right toast (upload.js).
+templ uploadWidget(data BrowseData) {
+	<input type="file" multiple data-upload-input hidden/>
+	<div
+		class="upload-toast"
+		data-upload-toast
+		data-upload-dir={ data.Dir }
+		data-label-waiting={ i18n.T(ctx, "upload.waiting") }
+		data-label-uploading={ i18n.T(ctx, "upload.uploading") }
+		data-label-done={ i18n.T(ctx, "upload.done") }
+		data-label-failed={ i18n.T(ctx, "upload.failed") }
+		hidden
+	>
+		<div class="upload-toast-head">
+			<span class="upload-toast-title" data-upload-title>{ i18n.T(ctx, "upload.uploading") }</span>
+			<button class="upload-toast-close" type="button" data-upload-close aria-label={ i18n.T(ctx, "upload.close") }>
+				@icon("x")
+			</button>
+		</div>
+		<progress class="upload-toast-overall" data-upload-overall value="0" max="100"></progress>
+		<ul class="upload-list" data-upload-list></ul>
+	</div>
+}
+
+
+// dirReadme renders the directory's README below the file listing, like GitHub.
+// Markdown is fetched and rendered client-side by render.js (reusing the viewer's
+// data-markdown-view hook); plain text is shown preformatted. Empty when there is
+// no README candidate.
+templ dirReadme(data BrowseData) {
+	if data.Readme.Path != "" {
+		<section class="dir-readme">
+			<div class="dir-readme-head">
+				<span class="dir-readme-icon">@icon("book")</span>
+				<span class="dir-readme-title">{ data.Readme.Name }</span>
+				<a class="dir-readme-link" href={ templ.URL(ViewURL(data.Readme.Path)) } title={ i18n.T(ctx, "readme.open") }>
+					@icon("corner-up")
+				</a>
+			</div>
+			if data.Readme.Kind == "markdown" {
+				<div class="markdown-body dir-readme-body" data-markdown-view data-src={ RawURL(data.Readme.Path) }></div>
+			} else {
+				<pre class="dir-readme-body dir-readme-text" data-dir-readme-text data-src={ RawURL(data.Readme.Path) }></pre>
+			}
+		</section>
+		<link rel="stylesheet" href="/static/highlight-theme.css"/>
+		<link rel="stylesheet" href="/static/katex.min.css"/>
+		<script src="/static/marked.min.js"></script>
+		<script src="/static/mermaid.min.js"></script>
+		<script src="/static/highlight.min.js"></script>
+		<script src="/static/katex.min.js"></script>
+		<script src="/static/katex-auto-render.min.js"></script>
+		<script src="/static/markdown-ext.js"></script>
+		<script src="/static/render.js"></script>
+	}
+}

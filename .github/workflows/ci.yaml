@@ -1,0 +1,84 @@
+name: build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+env:
+  VERSION_MAJOR: 0
+  VERSION_MINOR: 1
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: generate version
+        id: version
+        shell: bash
+        run: |
+          REVISION=${{ github.run_number }}
+          VERSION="${{ env.VERSION_MAJOR }}.${{ env.VERSION_MINOR }}.${REVISION}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Generated version: ${VERSION}"
+
+  build:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup golang
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      # templ sources (*.templ) are not committed; regenerate the *_templ.go
+      # files before tests and build. Pinned to the version in go.mod.
+      - name: generate templ sources
+        run: |
+          go install github.com/a-h/templ/cmd/templ@$(go list -m -f '{{.Version}}' github.com/a-h/templ)
+          templ generate
+
+      - name: run tests
+        run: |
+          CGO_ENABLED=0 go test ./...
+
+      - name: build project
+        run: |
+          go mod download
+
+          mkdir -p dist
+
+          VERSION="${{ needs.version.outputs.version }}"
+          LD_FLAGS="-X 'main.Version=${VERSION}'"
+
+          echo "Building linux binary (version: ${VERSION})"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "${LD_FLAGS}" -o "dist/tdrive-linux-amd64" .
+          tar -czvf "dist/tdrive-linux-amd64.tar.gz" -C dist "tdrive-linux-amd64"
+
+          echo "Building windows binary (version: ${VERSION})"
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "${LD_FLAGS}" -o "dist/tdrive-windows-amd64.exe" .
+          (cd dist && zip "tdrive-windows-amd64.zip" "tdrive-windows-amd64.exe")
+
+      - name: create release
+        uses: softprops/action-gh-release@v1
+        if: github.ref == 'refs/heads/master'
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: |
+            dist/tdrive-linux-amd64.tar.gz
+            dist/tdrive-windows-amd64.zip

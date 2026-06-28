@@ -1,0 +1,67 @@
+package view
+
+//go:generate templ generate
+
+import (
+	"tdrive/internal/i18n"
+	"tdrive/internal/meta"
+)
+
+// Layout renders the shared page chrome: head, top navigation, and the content slot.
+templ Layout(page PageContext) {
+	<!DOCTYPE html>
+	<html lang={ page.Lang }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="color-scheme" content="light dark"/>
+			<title>{ page.Title }</title>
+			<link rel="stylesheet" href="/static/app.css"/>
+			<script src="/static/htmx.min.js"></script>
+		</head>
+		<body>
+			@navbar(page)
+			<main class="content">
+				{ children... }
+			</main>
+		</body>
+	</html>
+}
+
+// navbar renders the sticky top bar: brand on the left, language switch and
+// logout on the right.
+templ navbar(page PageContext) {
+	<header class="navbar">
+		<a class="brand" href={ templ.URL(BrowseURL("/")) }>
+			<span class="brand-glyph">@icon("folder")</span>
+			<span class="brand-name">{ meta.Name }</span>
+		</a>
+		<nav class="nav-actions">
+			<span class="lang-switch">
+				<a
+					href={ templ.URL(LangURL("zh", page.CurrentURI)) }
+					class={ langClass(page.Lang, "zh") }
+				>{ i18n.T(ctx, "lang.zh") }</a>
+				<a
+					href={ templ.URL(LangURL("en", page.CurrentURI)) }
+					class={ langClass(page.Lang, "en") }
+				>{ i18n.T(ctx, "lang.en") }</a>
+			</span>
+			if page.AuthEnabled {
+				<a class="nav-icon" href="/logout" title={ i18n.T(ctx, "nav.logout") } aria-label={ i18n.T(ctx, "nav.logout") }>
+					@icon("log-out")
+				</a>
+			}
+		</nav>
+	</header>
+}
+
+// langClass marks the active language link.
+func langClass(active string, code string) string {
+
+	if active == code {
+		return "lang-link lang-active"
+	}
+
+	return "lang-link"
+}
