@@ -1,0 +1,26 @@
+package view
+
+import "tdrive/internal/i18n"
+
+// LoginPage renders the password gate shown when a password is configured.
+templ LoginPage(data LoginData) {
+	@Layout(data.Page) {
+		<div class="login">
+			<form class="login-card" method="post" action="/login">
+				<h1 class="login-title">{ i18n.T(ctx, "login.title") }</h1>
+				<p class="login-hint">{ i18n.T(ctx, "login.hint") }</p>
+				<input type="hidden" name="next" value={ data.Next }/>
+				<label class="login-field">
+					<span>{ i18n.T(ctx, "login.password") }</span>
+					<input type="password" name="password" autofocus required/>
+				</label>
+				if data.ShowError {
+					<p class="login-error">{ i18n.T(ctx, "login.error") }</p>
+				}
+				<button class="btn btn-primary login-submit" type="submit">
+					{ i18n.T(ctx, "login.submit") }
+				</button>
+			</form>
+		</div>
+	}
+}

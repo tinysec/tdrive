@@ -1,0 +1,7 @@
+package view
+
+// icon renders a named inline SVG glyph. The markup comes from Icon (a fixed,
+// trusted set in icons.go), so emitting it raw is safe.
+templ icon(name string) {
+	@templ.Raw(Icon(name))
+}

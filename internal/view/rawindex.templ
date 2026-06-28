@@ -1,0 +1,20 @@
+package view
+
+// RawIndex renders a plain, nginx-style directory listing for /raw. It has no
+// app chrome or scripts — just the listing built by the handler. Body is trusted
+// HTML assembled server-side (names and links are escaped there).
+templ RawIndex(data RawIndexData) {
+	<!DOCTYPE html>
+	<html>
+		<head>
+			<meta charset="utf-8"/>
+			<title>{ "Index of " + data.Dir }</title>
+		</head>
+		<body>
+			<h1>{ "Index of " + data.Dir }</h1>
+			<hr/>
+			@templ.Raw(data.Body)
+			<hr/>
+		</body>
+	</html>
+}
